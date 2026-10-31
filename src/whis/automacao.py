@@ -24,6 +24,8 @@ Este módulo faz poucas coisas, todas **explícitas e reversíveis**:
   por dia roda `whis vigia-freelas --agendada` e avisa o projeto novo do nicho;
 - `agendar_procura()` registra `Whis-Procura`, que uma vez por dia roda
   `whis procurar --agendada` e busca agências e lojas quando a fila acaba;
+- `agendar_posts_do_instagram()` registra `Whis-Instagram`, que todo dia às 19:00
+  roda `whis instagram-postar --agendada` e publica o post do dia da @velozo.dev;
 - `remover_legado()` tira da máquina o atalho e as tarefas que chamam um
   módulo ou um comando que não existe mais.
 
@@ -67,6 +69,8 @@ NOME_DA_TAREFA_DAS_REUNIOES = "Whis-Reunioes"
 NOME_DA_TAREFA_DO_LEMBRETE = "Whis-Lembrete-Cacada"
 NOME_DA_TAREFA_DA_VIGIA_DE_FREELAS = "Whis-Vigia-Freelas"
 NOME_DA_TAREFA_DA_PROCURA = "Whis-Procura"
+NOME_DA_TAREFA_DO_INSTAGRAM = "Whis-Instagram"
+HORA_DOS_POSTS_DO_INSTAGRAM = "19:00"
 #: A busca de agências e a de lojas chamam o Claude com busca na web (até 40 e 30 min) e medem as lojas.
 LIMITE_DA_PROCURA_MIN = 90
 
@@ -579,6 +583,26 @@ def agendar_procura(configuracao: Configuracao, *, executar: Executor = _rodar) 
 
 def desagendar_procura(*, executar: Executor = _rodar) -> bool:
     return _desregistrar_tarefa(NOME_DA_TAREFA_DA_PROCURA, executar=executar)
+
+
+def agendar_posts_do_instagram(configuracao: Configuracao, *, executar: Executor = _rodar) -> str:
+    """Registra `Whis-Instagram`: todo dia às 19:00, o Reel ou o carrossel do dia do calendário do velozo-reels.
+
+    Dia sem item termina sem abrir o Chrome. Com `-StartWhenAvailable`, o PC ligado depois das 19h
+    ainda posta o item do mesmo dia; o de um dia que passou só vira aviso.
+    """
+    _registrar_tarefa(
+        NOME_DA_TAREFA_DO_INSTAGRAM,
+        executavel=str(interpretador_sem_console()),
+        argumentos=_argumentos_do_whis("instagram-postar --agendada", configuracao.origem or caminho_padrao()),
+        gatilhos=[f"Daily={HORA_DOS_POSTS_DO_INSTAGRAM}"],
+        executar=executar,
+    )
+    return NOME_DA_TAREFA_DO_INSTAGRAM
+
+
+def desagendar_posts_do_instagram(*, executar: Executor = _rodar) -> bool:
+    return _desregistrar_tarefa(NOME_DA_TAREFA_DO_INSTAGRAM, executar=executar)
 
 
 def _depois(hora: str, atraso: timedelta) -> str:

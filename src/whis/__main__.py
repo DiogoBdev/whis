@@ -8,7 +8,7 @@ para as reuniões da Granola::
 
     python -m whis init
     python -m whis bandeja
-    python -m whis windows [--daily] [--news] [--meetings] [--hunt] [--vigia-freelas] [--procura] [--remover] [--remover-legado]
+    python -m whis windows [--daily] [--news] [--meetings] [--hunt] [--vigia-freelas] [--procura] [--instagram] [--remover] [--remover-legado]
     python -m whis diario [YYYY-MM-DD] [--simular]
     python -m whis daily [--anotar TEXTO] [--simular] [--fakes] [--agendada]
     python -m whis news [--agendada] [--fakes] [--simular]
@@ -21,6 +21,7 @@ para as reuniões da Granola::
     python -m whis o-que-pedem [--nicho NICHO] | agencias [--forcar] [--fakes]
     python -m whis procurar [--agendada] [--forcar] [--fakes] | instagram [--forcar] [--fakes]
     python -m whis vigia-x [--fakes] | ideia-x [--forcar] [--fakes]
+    python -m whis instagram-login | instagram-postar [--agendada] [--simular [--data AAAA-MM-DD]] [--ensaio] [--pasta P]
     python -m whis perguntar "<pergunta>" [--sem-fio]
     python -m whis atender
 
@@ -544,6 +545,98 @@ def _comando_x_login(_args: argparse.Namespace) -> int:
         return 0
     print("Login não concluído: a home do X não abriu logada nesse perfil. Rode de novo e entre antes de fechar.")
     return 1
+
+
+def _comando_instagram_login(_args: argparse.Namespace) -> int:
+    from . import posts_do_instagram
+
+    print(
+        f"Abrindo o Chrome do Whis no login do Instagram. Entre na @{posts_do_instagram.USUARIO} e, "
+        "quando o feed aparecer, feche a janela."
+    )
+    if posts_do_instagram.abrir_login():
+        print(f"Sessão salva: o Whis posta na @{posts_do_instagram.USUARIO} no dia e na hora do calendário.")
+        return 0
+    print(f"Login não concluído: o Chrome do Whis não abriu na @{posts_do_instagram.USUARIO}. Rode de novo.")
+    return 1
+
+
+def _comando_instagram_postar(args: argparse.Namespace) -> int:
+    """O post do dia da @velozo.dev; `--simular` mostra o plano sem abrir o Chrome, `--ensaio` para antes de Compartilhar."""
+    from . import celular
+    from . import posts_do_instagram as posts
+
+    configuracao = _configuracao(args)
+    _registro.acrescentar_arquivo(configuracao, verboso=args.verboso)
+    agora = datetime.now()
+    if args.data:
+        if not args.simular:
+            print("--data só vale com --simular.")
+            return SAIDA_DE_USO
+        agora = datetime.combine(args.data, posts.HORA_PADRAO) + timedelta(minutes=1)
+    postagens = posts.ler_calendario()
+    estado = posts.caminho_do_estado()
+    if args.simular:
+        return _simular_instagram(postagens, posts.ler_estado(estado), agora, pasta=args.pasta, agendada=args.agendada)
+    resultado = posts.publicar_do_dia(
+        posts.PublicadorDoNavegador(),
+        estado=estado,
+        avisar=lambda texto: celular.avisar(configuracao, texto) or print(f"(sem Telegram) {texto}"),
+        agora=agora,
+        postagens=postagens,
+        pasta=args.pasta or "",
+        agendada=args.agendada,
+        ensaio=args.ensaio,
+    )
+    for perdida in resultado.perdidas:
+        print(f"Perdido: {perdida.nome} ({perdida.dia:%d/%m}); avisei no celular.")
+    if resultado.postagem is None:
+        print(f"Instagram: nada a postar agora ({resultado.motivo}).")
+        return SAIDA_COMPLETA
+    nome = resultado.postagem.nome
+    if resultado.situacao == posts.ENSAIO:
+        print(f"Ensaio do {nome}: tudo montado até o Compartilhar, que não foi clicado.")
+    elif resultado.situacao == posts.PUBLICADO:
+        print(f"Publicado: {nome} {resultado.link}")
+    elif resultado.situacao == posts.INCERTO:
+        print(f"Incerto: cliquei em Compartilhar no {nome} e o Instagram não confirmou.")
+    else:
+        print(f"Não saiu: {nome}: {resultado.motivo}")
+    for aviso in resultado.avisos:
+        print(f"Atenção: {aviso}")
+    for foto in resultado.fotos:
+        print(f"  {foto}")
+    return SAIDA_COMPLETA if resultado.situacao in (posts.ENSAIO, posts.PUBLICADO) else SAIDA_PARCIAL
+
+
+def _simular_instagram(postagens, registros: dict, agora: datetime, *, pasta: str | None, agendada: bool) -> int:
+    from . import posts_do_instagram as posts
+
+    problemas = 0
+    for postagem in postagens:
+        situacao = posts.situacao(registros, postagem.pasta) or "-"
+        try:
+            conteudo = posts.conteudo_da_postagem(postagem)
+            fora = posts.slides_fora_do_tamanho(conteudo)
+            arquivos = ", ".join(arquivo.name for arquivo in conteudo.arquivos)
+            if len(conteudo.arquivos) > 2:
+                arquivos = f"{conteudo.arquivos[0].name} … {conteudo.arquivos[-1].name} ({len(conteudo.arquivos)})"
+            capa = f" + {conteudo.capa.name}" if conteudo.capa else ""
+            conferido = f"{arquivos}{capa}, legenda {len(conteudo.legenda)} car." + (f", FORA DO TAMANHO: {fora}" if fora else "")
+            problemas += bool(fora)
+        except posts.ConteudoIncompleto as erro:
+            conferido = f"FALTA: {erro}"
+            problemas += situacao in ("-", posts.FALHOU, posts.PERDIDO)
+        dia = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")[postagem.dia.weekday()]
+        print(f"{dia} {postagem.dia:%d/%m} {postagem.hora:%H:%M}  {postagem.pasta:<26} {situacao:<10} {conferido}")
+    escolhida, motivo = posts.escolher(postagens, registros, agora, pasta=pasta or "", agendada=agendada)
+    print()
+    print(f"Em {agora:%d/%m %H:%M}: " + (f"sairia o {escolhida.nome}." if escolhida else f"nada sairia ({motivo})."))
+    if escolhida:
+        conteudo = posts.conteudo_da_postagem(escolhida)
+        print("Legenda:")
+        print(conteudo.legenda)
+    return SAIDA_COMPLETA if not problemas else SAIDA_PARCIAL
 
 
 def _comando_news(args: argparse.Namespace) -> int:
@@ -2144,13 +2237,13 @@ def _comando_windows(args: argparse.Namespace) -> int:
     from . import automacao
 
     precisa_da_configuracao = bool(args.config) or (
-        (args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura) and not args.remover
+        (args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura or args.instagram) and not args.remover
     )
     configuracao = _configuracao(args) if precisa_da_configuracao else None
     origem = (configuracao.origem if configuracao else None) or caminho_padrao()
     feitos: list[str] = []
     so_remover_legado = args.remover_legado and not (
-        args.atendente or args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura
+        args.atendente or args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura or args.instagram
     )
 
     if args.daily and not args.remover and not configuracao.daily_horarios:
@@ -2216,6 +2309,13 @@ def _comando_windows(args: argparse.Namespace) -> int:
                     f"Tarefa '{automacao.NOME_DA_TAREFA_DA_PROCURA}' removida do Agendador."
                     if removida
                     else "Não havia procura agendada."
+                )
+            if args.instagram:
+                removida = automacao.desagendar_posts_do_instagram()
+                feitos.append(
+                    f"Tarefa '{automacao.NOME_DA_TAREFA_DO_INSTAGRAM}' removida do Agendador."
+                    if removida
+                    else "Não havia posts do Instagram agendados."
                 )
             if args.news:
                 removida = automacao.desagendar_noticias()
@@ -2310,6 +2410,13 @@ def _comando_windows(args: argparse.Namespace) -> int:
                     f"{configuracao.cacada_horario_da_procura} ela busca na web agências novas a cada 2 dias e "
                     f"lojas Shopify lentas novas quando a fila de e-mails ficou com menos de {MINIMO_NA_FILA}; os "
                     f"e-mails chegam pela vigia de freelas, um por dia de cada."
+                )
+            if args.instagram:
+                automacao.agendar_posts_do_instagram(configuracao)
+                feitos.append(
+                    f"Posts do Instagram agendados como '{automacao.NOME_DA_TAREFA_DO_INSTAGRAM}': todo dia às "
+                    f"{automacao.HORA_DOS_POSTS_DO_INSTAGRAM} sai o item do dia do calendário do velozo-reels na "
+                    f"@velozo.dev (login uma vez com 'whis instagram-login')."
                 )
             if args.meetings:
                 automacao.agendar_reunioes(configuracao)
@@ -2510,6 +2617,29 @@ def construir_parser() -> argparse.ArgumentParser:
         ),
     )
     x_login_cmd.set_defaults(funcao=_comando_x_login)
+
+    instagram_login_cmd = subcomandos.add_parser(
+        "instagram-login",
+        help="abre o Chrome do Whis no login do Instagram para você entrar na @velozo.dev",
+        description=(
+            "Abre um Chrome comum com o perfil só do Whis (%LOCALAPPDATA%\\whis\\navegador-instagram) no "
+            "login do Instagram. Entre na @velozo.dev e feche a janela; o Whis confere a sessão. O Whis "
+            "nunca vê a senha."
+        ),
+    )
+    instagram_login_cmd.set_defaults(funcao=_comando_instagram_login)
+
+    instagram_postar_cmd = subcomandos.add_parser(
+        "instagram-postar",
+        help="publica na @velozo.dev o Reel ou o carrossel do dia do calendário do velozo-reels",
+    )
+    _acrescentar_config(instagram_postar_cmd)
+    instagram_postar_cmd.add_argument("--agendada", action="store_true", help="chamada pela tarefa das 19:00: não tenta de novo o que falhou")
+    instagram_postar_cmd.add_argument("--simular", action="store_true", help="mostra o calendário conferido e o que sairia, sem abrir o Chrome")
+    instagram_postar_cmd.add_argument("--ensaio", action="store_true", help="monta o post no Instagram até o Compartilhar, sem clicar")
+    instagram_postar_cmd.add_argument("--pasta", default=None, help="um item do calendário (ex.: 01-plinko) em vez do de hoje")
+    instagram_postar_cmd.add_argument("--data", type=date.fromisoformat, default=None, help="com --simular: o dia AAAA-MM-DD às 19:01")
+    instagram_postar_cmd.set_defaults(funcao=_comando_instagram_postar)
 
     perguntar_cmd = subcomandos.add_parser(
         "perguntar",
@@ -2858,6 +2988,11 @@ def construir_parser() -> argparse.ArgumentParser:
             "também agenda a procura diária em [cacada].horario_da_procura (tarefa Whis-Procura): "
             "agências e lojas Shopify lentas novas quando a fila de e-mails acaba"
         ),
+    )
+    windows_cmd.add_argument(
+        "--instagram",
+        action="store_true",
+        help="também agenda os posts da @velozo.dev às 19:00 (tarefa Whis-Instagram), pelo calendário do velozo-reels",
     )
     windows_cmd.add_argument(
         "--remover", action="store_true", help="desfaz o que foi instalado"
