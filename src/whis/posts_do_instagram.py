@@ -67,7 +67,8 @@ _HORA = re.compile(r"^(\d{1,2})(?:[:h](\d{2}))?h?$")
 _SLIDE = re.compile(r"^\d{2}\.png$")
 _CODIGO = re.compile(r"/(?:p|reel|reels)/([A-Za-z0-9_-]{5,})/")
 _CODIGO_NA_RESPOSTA = re.compile(r'"code"\s*:\s*"([A-Za-z0-9_-]{5,})"')
-_COMPARTILHADO = re.compile(r"foi compartilhad[oa]|has been shared", re.I)
+#: "Compartilhando" (em andamento) não casa: só o particípio.
+_COMPARTILHADO = re.compile(r"compartilhad[oa]\b|has been shared|^(?:post|reel) shared", re.I)
 
 
 class ErroDoInstagram(RuntimeError):
@@ -496,10 +497,11 @@ _TEXTO_COMPARTILHAR = re.compile(r"^(Compartilhar|Share)$")
 _TEXTO_DO_COMPUTADOR = re.compile(r"^(Selecionar do computador|Select from computer)$")
 _TEXTO_AGORA_NAO = re.compile(r"^(Agora não|Not now)$")
 _TEXTO_OK = re.compile(r"^OK$")
+_TEXTO_POST = re.compile(r"^(Post|Publicação)$")
 _ROTULO_DE_IA = re.compile(r"r[óo]tulo de IA|AI label|conte[úu]do gerado por IA|AI[- ]generated", re.I)
 SELETOR_LOGADO = 'a[href*="/direct/inbox"]'
 SELETOR_DO_LOGIN = 'input[type="password"]'
-SELETOR_CRIAR = 'svg[aria-label="Nova publicação"], svg[aria-label="New post"]'
+SELETOR_CRIAR = 'svg[aria-label="Novo post"], svg[aria-label="Nova publicação"], svg[aria-label="New post"]'
 SELETOR_PUBLICACAO = 'svg[aria-label="Publicação"], svg[aria-label="Post"]'
 SELETOR_CORTE = 'svg[aria-label="Selecionar corte"], svg[aria-label="Select crop"]'
 SELETOR_LEGENDA = 'div[role="dialog"] div[contenteditable="true"]'
@@ -607,9 +609,14 @@ class SessaoDoInstagram:
         avisos: list[str] = []
         self._passo("abrir o Criar", lambda: pagina.locator(SELETOR_CRIAR).first.click(timeout=ESPERA_DO_PASSO_MS))
         try:
-            pagina.locator(SELETOR_PUBLICACAO).first.click(timeout=4_000)
-        except Exception:  # noqa: BLE001 — o Criar abriu direto o diálogo, sem o menu
-            pass
+            pagina.get_by_role("button", name=_TEXTO_DO_COMPUTADOR).first.wait_for(timeout=4_000)
+        except Exception:  # noqa: BLE001 — o Criar abriu o menu (Post, Live...) em vez do diálogo
+            self._passo(
+                "escolher Post no menu do Criar",
+                lambda: pagina.locator(SELETOR_PUBLICACAO).or_(pagina.get_by_text(_TEXTO_POST, exact=False)).first.click(
+                    timeout=ESPERA_DO_PASSO_MS
+                ),
+            )
 
         def escolher_arquivos() -> None:
             with pagina.expect_file_chooser(timeout=ESPERA_DO_PASSO_MS) as escolha:
@@ -677,7 +684,7 @@ class SessaoDoInstagram:
         antes_do_clique()
         pagina.get_by_role("button", name=_TEXTO_COMPARTILHAR).first.click(timeout=10_000)
         try:
-            pagina.get_by_text(_COMPARTILHADO).first.wait_for(timeout=ESPERA_DO_COMPARTILHAR_MS)
+            pagina.locator('div[role="dialog"]').get_by_text(_COMPARTILHADO).first.wait_for(timeout=ESPERA_DO_COMPARTILHAR_MS)
         except Exception as erro:  # noqa: BLE001 — sem a confirmação, fica incerto
             _log.warning("O Instagram não confirmou o post: %s", _motivo(erro))
             self.foto("4-sem-confirmacao")
