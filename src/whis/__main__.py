@@ -2352,12 +2352,16 @@ def _comando_windows(args: argparse.Namespace) -> int:
                     )
         elif not so_remover_legado:
             atalho = automacao.instalar_inicializacao()
-            feitos.append(f"Atalho de inicialização criado em {atalho}")
-            feitos.append(
-                f"Atalho do Menu Iniciar criado em {automacao.caminho_do_atalho_do_menu()} "
-                f"(AUMID {automacao.AUMID}) — é o que permite ao Whis mostrar toast."
-            )
-            feitos.append("A bandeja passa a subir sozinha no próximo logon.")
+            if automacao.MACOS:
+                feitos.append(f"Agente de login criado em {atalho}")
+                feitos.append("A bandeja passa a subir sozinha a cada login (e já subiu agora, se não estava no ar).")
+            else:
+                feitos.append(f"Atalho de inicialização criado em {atalho}")
+                feitos.append(
+                    f"Atalho do Menu Iniciar criado em {automacao.caminho_do_atalho_do_menu()} "
+                    f"(AUMID {automacao.AUMID}) — é o que permite ao Whis mostrar toast."
+                )
+                feitos.append("A bandeja passa a subir sozinha no próximo logon.")
             if args.atendente:
                 atalho_do_atendente = automacao.instalar_atendente()
                 feitos.append(f"Atalho do atendente criado em {atalho_do_atendente}")
