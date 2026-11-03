@@ -316,14 +316,15 @@ def sessao_valida(perfil: Path | None = None) -> bool:
 
 
 def caminho_do_chrome() -> Path | None:
-    bases = (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), os.environ.get("LOCALAPPDATA"))
-    candidatos = [Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe" for base in bases if base]
-    return next((caminho for caminho in candidatos if caminho.is_file()), None)
+    from .plataforma import candidatos_do_chrome
+
+    return next((caminho for caminho in candidatos_do_chrome() if caminho.is_file()), None)
 
 
 def pasta_do_perfil() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "whis" / "navegador-x"
+    from .plataforma import pasta_local_do_whis
+
+    return pasta_local_do_whis() / "navegador-x"
 
 
 def _abrir_contexto(playwright, perfil: Path, *, sem_janela: bool):

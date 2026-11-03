@@ -534,6 +534,9 @@ def test_cli_preenchido_vence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 def test_cli_vazio_cai_no_do_npm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from whis import plataforma
+
+    monkeypatch.setattr(plataforma, "WINDOWS", True)  # a busca do npm é a do Windows
     exe = tmp_path / "npm" / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
     exe.parent.mkdir(parents=True)
     exe.write_bytes(b"")
@@ -544,6 +547,9 @@ def test_cli_vazio_cai_no_do_npm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def test_sem_cli_do_npm_fica_o_empacotado(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from whis import plataforma
+
+    monkeypatch.setattr(plataforma, "WINDOWS", True)  # a busca do npm é a do Windows
     monkeypatch.setenv("APPDATA", str(tmp_path))
 
     assert caminho_do_cli(None) is None

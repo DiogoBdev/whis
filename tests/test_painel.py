@@ -9,6 +9,8 @@ por log.
 
 from __future__ import annotations
 
+import sys
+
 import tomllib
 from pathlib import Path
 
@@ -144,6 +146,7 @@ def test_modelo_e_chaves_fora_de_sincronia_estouram_ao_importar():
 # -- os valores como texto -----------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="caminho C:\\ só vira barra normal no Windows")
 def test_lista_vira_uma_linha_por_item_e_horarios_um_texto_por_dia():
     configuracao = Configuracao(
         vault=Path("V"),

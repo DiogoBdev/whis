@@ -53,7 +53,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from . import launchd as _launchd
 from . import sem_console as _sem_console
+from .plataforma import MACOS
 from .configuracao import Configuracao, caminho_padrao
 from .fontes import analisar_hora
 
@@ -140,10 +142,14 @@ def pasta_de_inicializacao() -> Path:
 
 
 def caminho_do_atalho() -> Path:
+    if MACOS:
+        return _launchd.caminho_do_plist("bandeja")
     return pasta_de_inicializacao() / NOME_DO_ATALHO
 
 
 def caminho_do_atalho_do_atendente() -> Path:
+    if MACOS:
+        return _launchd.caminho_do_plist("atendente")
     return pasta_de_inicializacao() / NOME_DO_ATALHO_DO_ATENDENTE
 
 
@@ -200,8 +206,11 @@ def _criar_atalho_com_aumid(
     """Escreve um `.lnk` com `System.AppUserModel.ID` pelo script empacotado.
 
     O `WScript.Shell` não grava essa propriedade; é preciso abrir o atalho como
-    `IPropertyStore`, e isso mora no `.ps1` ao lado deste módulo.
+    `IPropertyStore`, e isso mora no `.ps1` ao lado deste módulo. No Mac não
+    há AUMID: a notificação sai sem atalho nenhum.
     """
+    if MACOS:
+        return destino
     destino.parent.mkdir(parents=True, exist_ok=True)
     resultado = executar(
         [
@@ -256,6 +265,17 @@ def _criar_atalho(destino: Path, *, argumentos: str, descricao: str, executar: E
     atalho no Windows sem dependência nova (o ADR 0001 pede projeto fino), e o
     resultado é um atalho de verdade — o usuário vê, move e apaga pelo Explorer.
     """
+    if MACOS:
+        import shlex
+
+        return _launchd.escrever_e_carregar(
+            destino.stem,
+            [str(interpretador_sem_console()), *shlex.split(argumentos)],
+            diretorio=_diretorio_do_projeto(),
+            gatilhos=None,
+            executar=executar,
+            destino=destino,
+        )
     destino.parent.mkdir(parents=True, exist_ok=True)
     interpretador = interpretador_sem_console()
     diretorio = Path(__file__).resolve().parents[2]
@@ -297,6 +317,8 @@ def remover_atendente() -> Path | None:
 
 
 def _remover_atalho(destino: Path) -> Path | None:
+    if MACOS:
+        return destino if _launchd.remover(destino, executar=_rodar) else None
     if not destino.exists():
         return None
     destino.unlink()
@@ -347,6 +369,16 @@ def _registrar_tarefa(
     """
     if not gatilhos:
         raise ErroDeAutomacao(f"a tarefa '{nome}' precisa de pelo menos um gatilho.")
+    if MACOS:
+        _launchd.registrar_tarefa(
+            nome,
+            executavel=executavel,
+            argumentos=argumentos,
+            diretorio=_diretorio_do_projeto(),
+            gatilhos=gatilhos,
+            executar=executar,
+        )
+        return
     limite = ["-LimiteMinutos", str(limite_minutos)] if limite_minutos else []
     resultado = executar(
         [
@@ -379,6 +411,8 @@ def _registrar_tarefa(
 
 
 def _desregistrar_tarefa(nome: str, *, executar: Executor) -> bool:
+    if MACOS:
+        return _launchd.desregistrar_tarefa(nome, executar=executar)
     resultado = executar(
         [
             "powershell",
@@ -395,6 +429,8 @@ def _desregistrar_tarefa(nome: str, *, executar: Executor) -> bool:
 
 
 def _tarefa_agendada(nome: str, *, executar: Executor) -> bool:
+    if MACOS:
+        return _launchd.tarefa_agendada(nome, executar=executar)
     resultado = executar(
         [
             "powershell",
@@ -649,6 +685,19 @@ def agendar_vigia(configuracao: Configuracao, *, executar: Executor = _rodar) ->
     Whis morreria junto.
     """
     vigiadas = tarefas_vigiadas(executar=executar)
+    if MACOS:
+        # o vigia.sh, irmão do vigia.ps1: zsh puro, sem Python
+        _registrar_tarefa(
+            NOME_DA_TAREFA_DO_VIGIA,
+            executavel="/bin/zsh",
+            argumentos=(
+                f'"{SCRIPT_DO_VIGIA.with_suffix(".sh")}" {caminho_do_atalho().stem} '
+                + ",".join(_launchd.rotulo(nome) for nome in vigiadas)
+            ),
+            gatilhos=gatilhos_do_vigia(configuracao),
+            executar=executar,
+        )
+        return vigiadas
     argumentos = (
         f'-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{SCRIPT_DO_VIGIA}" '
         f"-Aumid {AUMID} -Tarefas {','.join(vigiadas)}"
@@ -690,6 +739,8 @@ def remover_legado(*, executar: Executor = _rodar) -> Legado:
     em lugar nenhum. Nada é recriado aqui; o atalho novo é de
     `instalar_inicializacao`. `tarefas` são as que existiam e saíram.
     """
+    if MACOS:  # o nome antigo nunca existiu no Mac
+        return Legado(atalho=None, tarefas=())
     atalho = _remover_atalho(caminho_do_atalho_legado())
     removidas = []
     for nome in TAREFAS_LEGADAS:

@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -172,6 +173,13 @@ posts_por_vez = 3            # quantos rascunhos de post o comando linkedin escr
 [obsidian]
 vault = "245833c11ad43e6e"   # o ID do vault (Copy vault ID no seletor de vaults) ou o nome da pasta; é o que o botão "Abrir no Obsidian" usa
 """
+
+if sys.platform == "darwin":
+    # No Mac o atalho padrão é outro (Ctrl+Space troca o idioma do teclado) e o
+    # vault do Obsidian é achado pelo nome da pasta.
+    MODELO_DE_CONFIGURACAO = MODELO_DE_CONFIGURACAO.replace(
+        'atalho = "ctrl+space"        #', f'atalho = "{ATALHO_PADRAO}"         #'
+    ).replace('vault = "245833c11ad43e6e"   #', 'vault = ""                   #')
 
 
 class ConfiguracaoInvalida(RuntimeError):
@@ -437,9 +445,9 @@ class Configuracao:
 
 def caminho_padrao() -> Path:
     """Onde a configuração mora quando `WHIS_CONFIG` não está setada."""
-    appdata = os.environ.get("APPDATA")
-    base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
-    return base / "whis" / NOME_DO_ARQUIVO
+    from .plataforma import pasta_de_config
+
+    return pasta_de_config() / "whis" / NOME_DO_ARQUIVO
 
 
 def caminho_da_configuracao(caminho: Path | str | None = None) -> Path:

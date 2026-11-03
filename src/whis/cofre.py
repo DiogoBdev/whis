@@ -23,15 +23,16 @@ Transformar = Callable[[bytes], bytes]
 
 
 def _cifrar_dpapi(dados: bytes) -> bytes:
-    import win32crypt
+    """DPAPI no Windows; Fernet com a chave no Keychain no macOS (`plataforma`)."""
+    from .plataforma import cifrar
 
-    return win32crypt.CryptProtectData(dados, "Whis cofre", None, None, None, 0)
+    return cifrar(dados, "Whis cofre")
 
 
 def _decifrar_dpapi(dados: bytes) -> bytes:
-    import win32crypt
+    from .plataforma import decifrar
 
-    return win32crypt.CryptUnprotectData(dados, None, None, None, 0)[1]
+    return decifrar(dados, "Whis cofre")
 
 
 class Cofre:

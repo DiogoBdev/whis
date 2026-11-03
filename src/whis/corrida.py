@@ -49,11 +49,39 @@ class CacadaEmAndamento(RuntimeError):
 
 def pasta_da_cacada() -> Path:
     r"""`%LOCALAPPDATA%\whis\cacada` — o estado da corrida, fora do vault."""
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "whis" / "cacada"
+    from .plataforma import pasta_local_do_whis
+
+    return pasta_local_do_whis() / "cacada"
 
 
 # -- o PC acordado ------------------------------------------------------------
+
+
+_caffeinate = None
+
+
+def _caffeinate_ligar() -> bool:
+    """No macOS: `caffeinate -i -w <pid>` segura a suspensão por inatividade enquanto este processo viver."""
+    global _caffeinate
+    import os
+    import subprocess
+
+    if _caffeinate is not None and _caffeinate.poll() is None:
+        return True
+    try:
+        _caffeinate = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+    except OSError as erro:
+        _log.warning("Não consegui pedir ao macOS para não suspender: %s", erro)
+        return False
+    _log.info("O Mac fica acordado enquanto a caçada corre.")
+    return True
+
+
+def _caffeinate_desligar() -> None:
+    global _caffeinate
+    if _caffeinate is not None:
+        _caffeinate.terminate()
+        _caffeinate = None
 
 
 def manter_acordado(*, pedir: Callable[[int], int] | None = None) -> bool:
@@ -64,6 +92,8 @@ def manter_acordado(*, pedir: Callable[[int], int] | None = None) -> bool:
     Windows (desenvolvimento) não faz nada e devolve `False`.
     """
     if pedir is None:
+        if sys.platform == "darwin":
+            return _caffeinate_ligar()
         if sys.platform != "win32":
             return False
         import ctypes
@@ -84,6 +114,9 @@ def manter_acordado(*, pedir: Callable[[int], int] | None = None) -> bool:
 def liberar_sono(*, pedir: Callable[[int], int] | None = None) -> None:
     """Devolve ao Windows o direito de suspender. O fim do processo faria o mesmo."""
     if pedir is None:
+        if sys.platform == "darwin":
+            _caffeinate_desligar()
+            return
         if sys.platform != "win32":
             return
         import ctypes

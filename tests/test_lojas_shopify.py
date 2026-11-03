@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -226,6 +228,9 @@ def test_a_procura_de_verdade_conta_a_fila_das_lojas_e_as_agencias_a_cada_dois_d
     monkeypatch.setattr(lojas_email, "na_fila", lambda vault, estado: 12)
     monkeypatch.setattr(agencias.AgenciasClaude, "buscar", lambda self, conhecidas: pytest.fail("buscou agência antes de 2 dias"))
     monkeypatch.setattr(lojas_shopify.LojasClaude, "buscar", lambda self, conhecidas: pytest.fail("buscou loja com a fila cheia"))
+    from whis import instagram
+
+    monkeypatch.setattr(instagram.InstagramClaude, "buscar", lambda self, quantos, conhecidos, voz: ())
     arquivo = tmp_path / "config.toml"
     arquivo.write_text(f'vault = "{(tmp_path / "vault").as_posix()}"\n', encoding="utf-8")
 
@@ -236,6 +241,7 @@ def test_a_procura_de_verdade_conta_a_fila_das_lojas_e_as_agencias_a_cada_dois_d
     assert "Lojas: sem busca hoje, a fila ainda tem 12 loja(s) para escrever." in saida
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="cria o atalho de verdade pelo PowerShell")
 def test_whis_windows_liga_e_desliga_a_procura(tmp_path: Path, monkeypatch, capsys):
     from whis import automacao
     from whis.__main__ import main

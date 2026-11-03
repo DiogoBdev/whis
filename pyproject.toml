@@ -10,7 +10,8 @@ dependencies = [
     "claude-agent-sdk>=0.2.140",  # o Claude da conta do usuário (OAuth); 0.2.140 traz o ResultError do limite do plano
     "mcp>=2.0",                 # o MCP oficial da Granola (reuniões), com OAuth
     "slack_sdk>=3.27",          # a DM do agente por Socket Mode (sem porta aberta)
-    "pywin32>=306",             # RegisterHotKey e o loop de mensagens do atalho da palheta
+    "pywin32>=306; sys_platform == 'win32'",  # RegisterHotKey, clipboard e DPAPI (no Mac: Carbon, pbcopy, Keychain)
+    "cryptography>=42",         # o cofre no macOS: Fernet com a chave no Keychain
     "playwright>=1.47",         # o X do jornal, lido pelo Chrome instalado (sem baixar navegador)
 ]
 
@@ -28,7 +29,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-whis = ["*.ps1"]
+whis = ["*.ps1", "*.sh"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

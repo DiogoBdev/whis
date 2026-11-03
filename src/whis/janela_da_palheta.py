@@ -59,11 +59,18 @@ ALTURA_DA_LINHA = 40
 ALTURA_DO_RODAPE = 40
 #: O realce da linha selecionada fica este tanto para dentro da borda do painel.
 RECUO_DA_LINHA = 8
-FONTE = ("Segoe UI", 18)
-FONTE_DA_LINHA = ("Segoe UI", 11)
-FONTE_DA_DESCRICAO = ("Segoe UI", 9)
-FONTE_DO_ICONE = ("Segoe UI", 12)
-FONTE_DO_RODAPE = ("Segoe UI", 9)
+import sys as _sys
+
+_MAC = _sys.platform == "darwin"
+#: A fonte do sistema: Segoe UI no Windows, Helvetica Neue no Mac (o Tk do Mac
+#: desenha pontos maiores, por isso os tamanhos sobem um pouco lá).
+_FAMILIA = "Helvetica Neue" if _MAC else "Segoe UI"
+_ESCALA = 1.25 if _MAC else 1.0
+FONTE = (_FAMILIA, round(18 * _ESCALA))
+FONTE_DA_LINHA = (_FAMILIA, round(11 * _ESCALA))
+FONTE_DA_DESCRICAO = (_FAMILIA, round(9 * _ESCALA))
+FONTE_DO_ICONE = (_FAMILIA, round(12 * _ESCALA))
+FONTE_DO_RODAPE = (_FAMILIA, round(9 * _ESCALA))
 
 FUNDO = "#0e0e10"
 FUNDO_SELECIONADO = "#232327"
@@ -482,6 +489,14 @@ class JanelaDaPalheta:
         imagem = fundo_desfocado.desfocar(
             atras, cor=FUNDO, opacidade=OPACIDADE_DO_FUNDO, raio_dos_cantos=RAIO, cor_de_fora=COR_TRANSPARENTE
         )
+        if _MAC:
+            # No Mac a janela é transparente de verdade: os cantos viram alfa zero.
+            from PIL import Image, ImageDraw
+
+            mascara = Image.new("L", imagem.size, 0)
+            ImageDraw.Draw(mascara).rounded_rectangle((0, 0, imagem.width - 1, imagem.height - 1), RAIO, fill=255)
+            imagem = imagem.convert("RGBA")
+            imagem.putalpha(mascara)
         self._foto = ImageTk.PhotoImage(imagem, master=self._raiz)
         self._tela.delete("fundo")
         self._tela.create_image(0, 0, anchor="nw", image=self._foto, tags=("fundo",))
@@ -497,6 +512,14 @@ class JanelaDaPalheta:
         if self._vestida:
             return
         self._vestida = True
+        if _MAC:
+            try:
+                self._raiz.attributes("-transparent", True)
+                self._raiz.configure(background="systemTransparent")
+                self._tela.configure(background="systemTransparent")
+            except self._tk.TclError as erro:
+                _log.debug("Sem a janela transparente do Mac: %s", erro)
+            return
         from . import dwm
 
         if dwm.arredondar_cantos(dwm.hwnd_da_raiz(self._raiz)):

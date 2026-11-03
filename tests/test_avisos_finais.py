@@ -8,6 +8,8 @@ casos e as duas portas do lançador.
 
 from __future__ import annotations
 
+import sys
+
 import tomllib
 from pathlib import Path
 
@@ -75,7 +77,8 @@ def test_obsidian_vault_chega_achatado_e_nasce_vazio(tmp_path: Path):
 def test_o_modelo_traz_o_id_do_vault_desta_maquina():
     dados = tomllib.loads(MODELO_DE_CONFIGURACAO.format(vault="V"))
 
-    assert dados["obsidian"]["vault"] == ID_DO_VAULT
+    # no Mac o modelo sai com o vault vazio: o nome da pasta faz as vezes do ID
+    assert dados["obsidian"]["vault"] == ("" if sys.platform == "darwin" else ID_DO_VAULT)
 
 
 # -- o subcomando daily -----------------------------------------------------

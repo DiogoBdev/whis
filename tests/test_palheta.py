@@ -10,6 +10,8 @@ verdade tem um teste próprio no fim, que pula onde não há tela.
 
 from __future__ import annotations
 
+from whis.atalho_global import ATALHO_PADRAO
+
 import json
 import tomllib
 from datetime import datetime, timedelta, timezone
@@ -856,7 +858,7 @@ def _config_com(tmp_path: Path, corpo_do_toml: str) -> Path:
 
 
 def test_o_atalho_da_palheta_vem_da_configuracao_com_padrao(tmp_path: Path):
-    assert carregar(_config_com(tmp_path, "")).palheta_atalho == "ctrl+space"
+    assert carregar(_config_com(tmp_path, "")).palheta_atalho == ATALHO_PADRAO
     assert carregar(_config_com(tmp_path, '[palheta]\natalho = "Ctrl + Shift + K"\n')).palheta_atalho == "ctrl+shift+k"
 
 
@@ -870,7 +872,7 @@ def test_atalho_invalido_e_configuracao_invalida(tmp_path: Path):
 def test_o_modelo_traz_o_atalho_padrao_comentado():
     dados = tomllib.loads(MODELO_DE_CONFIGURACAO.format(vault="V"))
 
-    assert dados["palheta"]["atalho"] == "ctrl+space"
+    assert dados["palheta"]["atalho"] == ATALHO_PADRAO
     assert "# o atalho global" in MODELO_DE_CONFIGURACAO
 
 
@@ -951,7 +953,7 @@ def test_o_subcomando_bandeja_monta_a_palheta_com_os_fakes_e_o_atalho(configurac
     [extras] = chamadas
     palheta = extras["palheta"]
     assert isinstance(palheta, Palheta)
-    assert extras["atalho"].texto == "ctrl+space"
+    assert extras["atalho"].texto == ATALHO_PADRAO
     escrever_nota_da_daily(caminho_do_vault)
     daily = next(comando for comando in palheta.comandos if comando.nome == "daily")
     resultado = daily.rodar("", palheta.configuracao)

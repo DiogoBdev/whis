@@ -47,15 +47,16 @@ def pasta_do_login(configuracao: Configuracao) -> Path:
 
 
 def _cifrar(dados: bytes) -> bytes:
-    import win32crypt
+    """DPAPI no Windows; Fernet com a chave no Keychain no macOS (`plataforma`)."""
+    from .plataforma import cifrar
 
-    return win32crypt.CryptProtectData(dados, "Whis Granola", None, None, None, 0)
+    return cifrar(dados, "Whis Granola")
 
 
 def _decifrar(dados: bytes) -> bytes:
-    import win32crypt
+    from .plataforma import decifrar
 
-    return win32crypt.CryptUnprotectData(dados, None, None, None, 0)[1]
+    return decifrar(dados, "Whis Granola")
 
 
 class GuardaDoLogin:

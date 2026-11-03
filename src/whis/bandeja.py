@@ -197,7 +197,7 @@ def executar(
     _log.info("Bandeja iniciada. Log em %s", destino)
     print(f"Whis na bandeja. Log em {destino}", flush=True)
 
-    from .atalho_global import AtalhoGlobal
+    from .atalho_global import criar_atalho_global
     from .janela_da_palheta import Acao, JanelaDaPalheta
 
     janela = JanelaDaPalheta()
@@ -237,7 +237,7 @@ def executar(
 
         palheta.abrir_painel = abrir_configuracao
 
-    hotkey = AtalhoGlobal(atalho, abrir_palheta) if atalho is not None else None
+    hotkey = criar_atalho_global(atalho, abrir_palheta) if atalho is not None else None
 
     def encerrar() -> None:
         if hotkey is not None:

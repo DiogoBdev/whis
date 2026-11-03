@@ -49,7 +49,31 @@ python -m venv .venv
 .venv\Scripts\python.exe -m whis windows
 ```
 
-The configuration file lives at `%APPDATA%\whis\config.toml` (override with `WHIS_CONFIG`). The only required key is `vault`, the path of the Obsidian vault; every integration is off until its keys are filled in. `python -m whis init` writes the whole template with a comment per key, and `settings` in the palette edits it in place. Logs go to `bandeja.log` next to the config file.
+### macOS
+
+Whis also runs on macOS. The Windows pieces have Mac counterparts chosen in `src/whis/plataforma.py`:
+
+| Windows | macOS |
+| --- | --- |
+| `%APPDATA%\whis` | `~/Library/Application Support/whis` |
+| `%LOCALAPPDATA%\whis` | `~/Library/Application Support/whis/local` |
+| DPAPI (`cofre.bin`, `granola.json`) | Fernet, with the key in the login Keychain (service `whis`) |
+| toast | Notification Center (`terminal-notifier` if installed, so the button opens the note; otherwise `osascript`) |
+| `RegisterHotKey`, `Ctrl+Space` | Carbon `RegisterEventHotKey`, `Alt+Space` (Option+Space) by default |
+| scheduled tasks + Startup shortcut | LaunchAgents in `~/Library/LaunchAgents/dev.whis.*.plist` |
+| `vigia.ps1` | `vigia.sh` |
+
+```sh
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -e '.[dev]'
+.venv/bin/python -m whis init
+.venv/bin/python -m whis bandeja
+.venv/bin/python -m whis mac --daily --news   # same flags as `whis windows`
+```
+
+Pasting a prompt into the previous app (`prompts`) sends Cmd+V through System Events, which needs the terminal (or Python) to have Accessibility permission. `brew install terminal-notifier` makes notification clicks open the note in Obsidian.
+
+The configuration file lives at `%APPDATA%\whis\config.toml` (`~/Library/Application Support/whis/config.toml` on macOS) (override with `WHIS_CONFIG`). The only required key is `vault`, the path of the Obsidian vault; every integration is off until its keys are filled in. `python -m whis init` writes the whole template with a comment per key, and `settings` in the palette edits it in place. Logs go to `bandeja.log` next to the config file.
 
 Run the test suite with `.venv\Scripts\python.exe -m pytest -q`.
 

@@ -2925,6 +2925,7 @@ def construir_parser() -> argparse.ArgumentParser:
 
     windows_cmd = subcomandos.add_parser(
         "windows",
+        aliases=["mac"],
         help="faz a bandeja subir com o logon (e, opcionalmente, agenda a daily, o jornal e as reuniões)",
         description=(
             "Amarra o Whis ao Windows. Sozinho, cria o atalho de logon da bandeja. "

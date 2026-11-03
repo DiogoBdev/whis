@@ -23,17 +23,32 @@ ESPERA_ANTES_DE_COLAR = 0.12
 
 _TENTATIVAS_DE_ABRIR = 10
 
-_anterior: int | None = None
+_anterior: int | str | None = None
+
+
+def _no_mac() -> bool:
+    import sys
+
+    return sys.platform == "darwin"
 
 
 def lembrar_janela_anterior() -> None:
     global _anterior
+    if _no_mac():
+        from .plataforma import app_da_frente_mac
+
+        _anterior = app_da_frente_mac()
+        return
     import win32gui
 
     _anterior = win32gui.GetForegroundWindow() or None
 
 
 def ler() -> str:
+    if _no_mac():
+        from .plataforma import ler_clipboard_mac
+
+        return ler_clipboard_mac()
     import win32clipboard
     import win32con
 
@@ -47,6 +62,11 @@ def ler() -> str:
 
 
 def copiar(texto: str) -> None:
+    if _no_mac():
+        from .plataforma import copiar_clipboard_mac
+
+        copiar_clipboard_mac(texto)
+        return
     import win32clipboard
     import win32con
 
@@ -66,7 +86,12 @@ def colar(texto: str) -> None:
     threading.Thread(target=lambda: _colar_em(alvo), name="whis-colar", daemon=True).start()
 
 
-def _colar_em(alvo: int | None) -> None:
+def _colar_em(alvo) -> None:
+    if _no_mac():
+        from .plataforma import colar_no_app_mac
+
+        colar_no_app_mac(alvo)
+        return
     import win32api
     import win32con
     import win32gui

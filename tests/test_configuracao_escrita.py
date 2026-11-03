@@ -10,6 +10,8 @@ o arquivo sai em UTF-8 sem BOM.
 
 from __future__ import annotations
 
+import sys
+
 import tomllib
 from dataclasses import replace
 from datetime import datetime
@@ -131,6 +133,7 @@ def test_os_comentarios_do_modelo_sobrevivem_e_os_do_usuario_nao(completo, tmp_p
     assert texto.startswith("# Configuração do Whis.")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="caminho C:\\ só vira barra normal no Windows")
 def test_caminhos_saem_com_barra_normal_e_git_desligado_sai_vazio(completo, tmp_path: Path):
     configuracao = replace(completo, vault=Path(r"C:\Users\x\vault"), git_raiz=None)
 

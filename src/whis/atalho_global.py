@@ -36,7 +36,10 @@ WM_HOTKEY = 0x0312
 #: O identificador que o Windows devolve em `wParam` — só temos um atalho.
 ID_DO_ATALHO = 1
 
-ATALHO_PADRAO = "ctrl+space"
+import sys as _sys
+
+#: No Mac, Ctrl+Space é o atalho do sistema para trocar o idioma do teclado.
+ATALHO_PADRAO = "alt+space" if _sys.platform == "darwin" else "ctrl+space"
 
 _MODIFICADORES = {
     "ctrl": MOD_CONTROL,
@@ -44,6 +47,10 @@ _MODIFICADORES = {
     "alt": MOD_ALT,
     "shift": MOD_SHIFT,
     "win": MOD_WIN,
+    # nomes do Mac: no macOS "win" e "cmd" são a tecla Command, e "alt" é a Option
+    "cmd": MOD_WIN,
+    "command": MOD_WIN,
+    "option": MOD_ALT,
 }
 
 _TECLAS = {
@@ -237,3 +244,128 @@ def _encerrar_thread_do_windows(tid: int) -> None:
     import win32api
 
     win32api.PostThreadMessage(tid, WM_QUIT, 0, 0)
+
+
+# -- o macOS ---------------------------------------------------------------
+#
+# No Mac o atalho é o `RegisterEventHotKey` do Carbon, por `ctypes`: como o
+# `RegisterHotKey` do Windows, o sistema só avisa da combinação registrada e
+# não pede a permissão de Acessibilidade. O evento chega ao laço de eventos do
+# aplicativo — o `mainloop` do Tk no thread principal —, então `iniciar` tem de
+# ser chamado no thread principal, antes do `mainloop`.
+
+_CMD_KEY = 0x0100
+_SHIFT_KEY = 0x0200
+_OPTION_KEY = 0x0800
+_CONTROL_KEY = 0x1000
+
+#: Os códigos virtuais do teclado ANSI (`Events.h`, `kVK_*`).
+_TECLAS_DO_MAC = {
+    "a": 0x00, "s": 0x01, "d": 0x02, "f": 0x03, "h": 0x04, "g": 0x05, "z": 0x06, "x": 0x07,
+    "c": 0x08, "v": 0x09, "b": 0x0B, "q": 0x0C, "w": 0x0D, "e": 0x0E, "r": 0x0F, "y": 0x10,
+    "t": 0x11, "1": 0x12, "2": 0x13, "3": 0x14, "4": 0x15, "6": 0x16, "5": 0x17, "9": 0x19,
+    "7": 0x1A, "8": 0x1C, "0": 0x1D, "o": 0x1F, "u": 0x20, "i": 0x22, "p": 0x23, "l": 0x25,
+    "j": 0x26, "k": 0x28, "n": 0x2D, "m": 0x2E, "space": 0x31, "espaco": 0x31,
+    "f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76, "f5": 0x60, "f6": 0x61, "f7": 0x62,
+    "f8": 0x64, "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
+}
+
+
+def _para_o_mac(atalho: Atalho) -> tuple[int, int]:
+    """`(modificadores do Carbon, código virtual)` a partir do `Atalho` analisado."""
+    modificadores = 0
+    if atalho.modificadores & MOD_CONTROL:
+        modificadores |= _CONTROL_KEY
+    if atalho.modificadores & MOD_ALT:
+        modificadores |= _OPTION_KEY
+    if atalho.modificadores & MOD_SHIFT:
+        modificadores |= _SHIFT_KEY
+    if atalho.modificadores & MOD_WIN:
+        modificadores |= _CMD_KEY
+    return modificadores, _TECLAS_DO_MAC[atalho.texto.rsplit("+", 1)[-1]]
+
+
+class AtalhoGlobalDoMac:
+    """O mesmo contrato do `AtalhoGlobal` (`iniciar`, `parar`, `registrado`), pelo Carbon."""
+
+    def __init__(self, atalho: Atalho, ao_disparar: Callable[[], None]) -> None:
+        self.atalho = atalho
+        self._ao_disparar = ao_disparar
+        self.registrado = False
+        self.disparos = 0
+        self._referencia = None
+        self._tratador = None  # segura o callback do ctypes vivo
+
+    def iniciar(self, *, espera_s: float = 5.0) -> bool:  # noqa: ARG002 — mesmo contrato do Windows
+        import ctypes
+
+        carbon = ctypes.CDLL("/System/Library/Frameworks/Carbon.framework/Carbon")
+
+        class EventTypeSpec(ctypes.Structure):
+            _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
+
+        class EventHotKeyID(ctypes.Structure):
+            _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
+
+        Tratador = ctypes.CFUNCTYPE(ctypes.c_int32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+
+        def tratar(_chamada, _evento, _dados) -> int:
+            self.disparos += 1
+            try:
+                self._ao_disparar()
+            except Exception:  # noqa: BLE001 — um disparo com erro não mata o atalho
+                _log.exception("O atalho disparou, mas abrir a palheta falhou.")
+            return 0
+
+        carbon.GetApplicationEventTarget.restype = ctypes.c_void_p
+        carbon.InstallEventHandler.argtypes = [
+            ctypes.c_void_p, Tratador, ctypes.c_uint32, ctypes.POINTER(EventTypeSpec),
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+        ]
+        carbon.RegisterEventHotKey.argtypes = [
+            ctypes.c_uint32, ctypes.c_uint32, EventHotKeyID, ctypes.c_void_p,
+            ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p),
+        ]
+        carbon.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
+
+        alvo = carbon.GetApplicationEventTarget()
+        self._tratador = Tratador(tratar)
+        tipo = EventTypeSpec(int.from_bytes(b"keyb", "big"), 5)  # kEventHotKeyPressed
+        manipulador = ctypes.c_void_p()
+        estado = carbon.InstallEventHandler(alvo, self._tratador, 1, ctypes.byref(tipo), None, ctypes.byref(manipulador))
+        if estado != 0:
+            _log.error("InstallEventHandler recusou (OSStatus %d).", estado)
+            return False
+
+        modificadores, tecla = _para_o_mac(self.atalho)
+        referencia = ctypes.c_void_p()
+        estado = carbon.RegisterEventHotKey(
+            tecla, modificadores, EventHotKeyID(int.from_bytes(b"whis", "big"), ID_DO_ATALHO),
+            alvo, 0, ctypes.byref(referencia),
+        )
+        if estado != 0:
+            _log.warning("RegisterEventHotKey recusou %s (OSStatus %d).", self.atalho.texto, estado)
+            return False
+        self._carbon = carbon
+        self._referencia = referencia
+        self.registrado = True
+        _log.info("Atalho global %s registrado (Carbon).", self.atalho.texto)
+        return True
+
+    def parar(self, *, espera_s: float = 3.0) -> None:  # noqa: ARG002
+        if self._referencia is not None:
+            try:
+                self._carbon.UnregisterEventHotKey(self._referencia)
+            except Exception as erro:  # noqa: BLE001 — o processo está saindo
+                _log.debug("Erro ao desregistrar o atalho: %s", erro)
+            self._referencia = None
+            self.registrado = False
+
+
+def criar_atalho_global(atalho: Atalho, ao_disparar: Callable[[], None]):
+    """O `AtalhoGlobal` do Windows ou o `AtalhoGlobalDoMac`, conforme o sistema."""
+    import sys
+
+    if sys.platform == "darwin":
+        return AtalhoGlobalDoMac(atalho, ao_disparar)
+    return AtalhoGlobal(atalho, ao_disparar)

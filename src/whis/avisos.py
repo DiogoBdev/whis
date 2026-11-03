@@ -37,21 +37,27 @@ def avisar(
     `obsidian://open?...`) sem que o Whis precise estar vivo para atender o
     clique. Devolve `False` — e loga — se o toast não saiu.
     """
-    comando = [
-        "powershell",
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(SCRIPT_DO_AVISO),
-        "-Titulo",
-        titulo,
-        "-Texto",
-        texto,
-        "-Aumid",
-        AUMID,
-    ]
+    from .plataforma import MACOS, comando_de_aviso_mac
+
+    if MACOS:
+        comando = comando_de_aviso_mac(titulo, texto, botao[1] if botao else None)
+        botao = None
+    else:
+        comando = [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(SCRIPT_DO_AVISO),
+            "-Titulo",
+            titulo,
+            "-Texto",
+            texto,
+            "-Aumid",
+            AUMID,
+        ]
     if botao is not None:
         rotulo, uri = botao
         comando += ["-RotuloDoBotao", rotulo, "-UriDoBotao", uri]

@@ -199,3 +199,40 @@ def publicacao_do_deck(monkeypatch: pytest.MonkeyPatch):
     fake = PublicacaoDoDeckFake()
     monkeypatch.setattr(cli, "montar_publicacao_do_deck", lambda _configuracao: fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def plataforma_do_windows(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """A suíte descreve o Whis do Windows (PowerShell, Agendador, toast) em qualquer máquina.
+
+    No Mac, `plataforma.MACOS` desligado faz `automacao` e `avisos` montarem os
+    comandos do Windows para os executores falsos conferirem; e o `launchd`, se
+    alguém chegar nele, escreve numa pasta temporária, nunca no
+    `~/Library/LaunchAgents` de quem roda a suíte. Os testes do caminho do Mac
+    (`test_mac.py`) religam o que precisam.
+    """
+    from whis import automacao, launchd, plataforma
+
+    monkeypatch.setattr(plataforma, "MACOS", False)
+    monkeypatch.setattr(automacao, "MACOS", False)
+    agentes = tmp_path_factory.mktemp("LaunchAgents")
+    monkeypatch.setattr(launchd, "pasta_dos_agentes", lambda: agentes)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path_factory.mktemp("localappdata")))
+
+
+@pytest.fixture(autouse=True)
+def claude_trancado(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nenhum teste fora de `rede` chama o Claude de verdade (e gasta a assinatura).
+
+    A procura de 03/11 chamava a busca do Instagram pelo CLI e o teste ficava 20 min
+    pendurado nela.
+    """
+    if request.node.get_closest_marker("rede"):
+        return
+    from whis import cacada_claude
+
+    def recusar(*_argumentos, **_nomeados):
+        raise AssertionError("teste chamou o Claude de verdade (claude_agent_sdk.query); use o fake")
+
+    # a porta de rede de `_ChamadaDoClaude._mensagens`; quem testa a chamada troca de novo
+    monkeypatch.setattr(cacada_claude, "query", recusar)

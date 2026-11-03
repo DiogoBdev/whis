@@ -6,6 +6,8 @@ renovação fala com um `httpx.MockTransport`; nada sai para a Granola.
 
 from __future__ import annotations
 
+import sys
+
 import asyncio
 import json
 from pathlib import Path
@@ -188,6 +190,7 @@ def test_o_login_mora_ao_lado_da_configuracao(arquivo_de_configuracao: Path):
     assert pasta_do_login(carregar(arquivo_de_configuracao)) == arquivo_de_configuracao.parent
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="decifra com a DPAPI do Windows")
 def test_o_conteudo_decifrado_e_o_json_esperado(tmp_path: Path):
     logado(tmp_path)
 

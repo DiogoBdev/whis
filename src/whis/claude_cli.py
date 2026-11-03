@@ -55,6 +55,13 @@ def caminho_do_cli(preenchido: str | None) -> str | None:
     """
     if preenchido and preenchido.strip():
         return preenchido.strip()
+    from .plataforma import WINDOWS
+
+    if not WINDOWS:
+        # No Mac o SDK acha o `claude` do PATH (instalador nativo ou npm) sozinho.
+        import shutil
+
+        return shutil.which("claude")
     appdata = os.environ.get("APPDATA")
     if not appdata:
         return None

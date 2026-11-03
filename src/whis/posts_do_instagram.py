@@ -189,8 +189,9 @@ def slides_fora_do_tamanho(conteudo: Conteudo) -> list[str]:
 
 
 def pasta_do_perfil() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "whis" / "navegador-instagram"
+    from .plataforma import pasta_local_do_whis
+
+    return pasta_local_do_whis() / "navegador-instagram"
 
 
 def pasta_das_midias() -> Path:
@@ -466,6 +467,21 @@ def sessao_valida(perfil: Path | None = None) -> bool:
 
 def fechar_chrome_do_perfil(perfil: Path, *, executar: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
     """Fecha a janela do login que ele deixou aberta: com ela, o Chrome do Whis não abre o perfil."""
+    import sys
+
+    if sys.platform == "darwin":
+        # `pkill -f` pelo caminho do perfil: TERM (o Chrome fecha limpo), e KILL no que sobrar.
+        try:
+            achou = executar(["pkill", "-f", f"--user-data-dir={perfil}"], capture_output=True, text=True, check=False)
+            if achou.returncode == 0:
+                import time
+
+                time.sleep(3)
+                executar(["pkill", "-9", "-f", f"--user-data-dir={perfil}"], capture_output=True, text=True, check=False)
+                _log.info("Fechei o Chrome que estava aberto no perfil do Instagram.")
+        except (OSError, subprocess.SubprocessError) as erro:
+            _log.info("Não deu para conferir o Chrome aberto no perfil do Instagram: %s", erro)
+        return
     alvo = str(perfil).lower().replace("'", "''")
     script = (
         "$p = @(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "

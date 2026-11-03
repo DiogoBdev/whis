@@ -15,6 +15,10 @@ formulário dublê e nunca abre janela.
 
 from __future__ import annotations
 
+import sys as _sys
+
+_FAMILIA = "Helvetica Neue" if _sys.platform == "darwin" else "Segoe UI"
+
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -318,7 +322,7 @@ class FormularioTk:
             if campo.chave.secao != secao_atual:
                 secao_atual = campo.chave.secao
                 titulo = f"[{secao_atual}]" if secao_atual else "geral"
-                ttk.Label(conteudo, text=titulo, font=("Segoe UI", 10, "bold")).grid(
+                ttk.Label(conteudo, text=titulo, font=(_FAMILIA, 10, "bold")).grid(
                     row=linha, column=0, columnspan=3, sticky="w", pady=(12, 2)
                 )
                 linha += 1
@@ -349,7 +353,7 @@ class FormularioTk:
             ttk.Checkbutton(pai, variable=marcado).grid(row=linha, column=1, sticky="w")
             return marcado
         if campo.tipo is Tipo.LISTA:
-            caixa = tk.Text(pai, height=3, width=60, font=("Segoe UI", 9))
+            caixa = tk.Text(pai, height=3, width=60, font=(_FAMILIA, 9))
             caixa.insert("1.0", texto)
             caixa.grid(row=linha, column=1, columnspan=2, sticky="ew")
             return caixa

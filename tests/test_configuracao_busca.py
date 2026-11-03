@@ -7,6 +7,8 @@ vault não protege nada, e o usuário acharia que está coberto.
 
 from __future__ import annotations
 
+import sys
+
 import tomllib
 from pathlib import Path
 
@@ -64,7 +66,7 @@ def test_uma_pasta_privada_so_tambem_vale_como_texto(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "pasta", ['"C:/fora/do/vault"', '"/fora"', '"../fora"', '"notas/../../fora"', '""', '"/"']
+    "pasta", [pytest.param('"C:/fora/do/vault"', marks=pytest.mark.skipif(sys.platform != "win32", reason="C:/ só é absoluto no Windows")), '"/fora"', '"../fora"', '"notas/../../fora"', '""', '"/"']
 )
 def test_pasta_privada_fora_do_vault_e_configuracao_invalida(tmp_path: Path, pasta: str):
     with pytest.raises(ConfiguracaoInvalida) as erro:

@@ -52,8 +52,10 @@ def lancar(alvo: str, *, iniciar=None, executar=subprocess.run) -> None:
     `ShellExecute`, mas com o `start` resolvendo o protocolo registrado.
     """
     iniciar = iniciar or getattr(os, "startfile", None)
-    if iniciar is None:  # outro sistema operacional — só no desenvolvimento
-        executar(["xdg-open", alvo], check=False)
+    if iniciar is None:  # macOS (`open`) ou Linux (`xdg-open`)
+        from .plataforma import comando_de_abrir
+
+        executar(comando_de_abrir(alvo), check=False)
         return
     try:
         iniciar(alvo)

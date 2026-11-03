@@ -145,13 +145,15 @@ ESQUEMA_DO_DESFECHO = {
 
 
 def pasta_do_perfil() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "whis" / "navegador-cacada"
+    from .plataforma import pasta_local_do_whis
+
+    return pasta_local_do_whis() / "navegador-cacada"
 
 
 def pasta_de_trabalho() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "whis" / "cacada" / "navegador-trabalho"
+    from .plataforma import pasta_local_do_whis
+
+    return pasta_local_do_whis() / "cacada" / "navegador-trabalho"
 
 
 class AgenteDoNavegador(_ChamadaDoClaude):
