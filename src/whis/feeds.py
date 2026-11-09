@@ -180,12 +180,20 @@ def coletar(
     return Coleta(candidatos=candidatos, time=do_time, fontes_com_falha=fontes_com_falha)
 
 
+_E_COMERCIAL_CRU = re.compile(rb"&(?!#\d+;|#x[0-9a-fA-F]+;|[A-Za-z][A-Za-z0-9]*;)")
+
+
 def interpretar_feed(corpo: bytes) -> tuple[ItemDeFeed, ...]:
     """Os primeiros itens de um RSS 2.0/0.91 ou Atom, sem os que não têm data.
 
     Levanta `FeedInvalido` (ou `ET.ParseError`) quando o corpo não é feed.
     """
-    raiz = ET.fromstring(corpo)
+    try:
+        raiz = ET.fromstring(corpo)
+    except ET.ParseError:
+        # Feed com "&" cru num endereço (o Real Work From Anywhere, 2026-11-09): o
+        # navegador lê, o XML estrito não. Escapa só o "&" que não abre entidade.
+        raiz = ET.fromstring(_E_COMERCIAL_CRU.sub(b"&amp;", corpo))
     tipo = raiz.tag.rsplit("}", 1)[-1].lower()
     if tipo == "rss":
         canal = raiz.find("channel")

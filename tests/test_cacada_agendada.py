@@ -131,3 +131,16 @@ def test_o_pedido_do_nicho_sistemas_abre_excecao_para_manutencao_mensal_e_erp_po
     assert "pago por marco" in pedido
     assert "e-commerce muito perto" not in pedido
     assert "e-commerce muito perto" in pedido_de_freelas("shopify")
+
+
+def test_feed_com_e_comercial_cru_ainda_e_lido():
+    from whis.feeds import interpretar_feed
+
+    corpo = (
+        b'<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>'
+        b'<item><title>Acme: Backend Dev</title><link>https://x.dev/a?b=1&c=2</link>'
+        b"<pubDate>Mon, 09 Nov 2026 10:00:00 GMT</pubDate><description>a &amp; b</description></item>"
+        b"</channel></rss>"
+    )
+    (item,) = interpretar_feed(corpo)
+    assert item.link == "https://x.dev/a?b=1&c=2"
