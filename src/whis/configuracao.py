@@ -40,6 +40,8 @@ PLATAFORMAS_SEM_CONTA = ("peopleperhour", "workana")
 PLATAFORMAS_PAGAS = ("freelancer.com.br", "freelancer.com")
 HORARIOS_DA_VIGIA_DE_FREELAS = tuple(f"{hora:02d}:00" for hora in range(7, 24))
 MODOS_DAS_PROPOSTAS_AUTO = ("desligado", "ensaio", "ligado")
+#: O que a caçada agendada (`whis hunt --agendada`) corre: "alternar" troca freelas e vagas a cada noite.
+MODOS_DA_CACADA_AGENDADA = ("alternar", "freelas", "vagas")
 POSTHOG_CHAVE = "phc_o3G5x8Q7jfzSe6G3fscQ5HQjKJDrH3X9fGg6EUFtZsxT"
 
 #: As chaves aceitas em `[daily].horarios`, na ordem em que a semana anda.
@@ -128,6 +130,9 @@ hora_do_lembrete = "20:00"   # quando a tarefa do lembrete olha se a semana do p
 usuario_freelancer = ""      # seu usuário no Freelancer.com (freelancer.com/u/<usuário>): a caçada só traz projeto com alguma skill do seu perfil, porque a conta grátis não propõe nos outros; vazio = sem esse filtro
 limite_minutos = 90          # fora da véspera (a semana do plano vira em mais de 24 h), a caçada para depois de tantos minutos; perto da virada, vai até o plano acabar; 0 = sem limite de tempo
 limite_plano = 15            # fora da véspera, a caçada para depois de gastar tantos pontos do plano semanal; 0 = sem limite de plano
+horario_da_cacada = ""       # a caçada que roda sozinha todo dia nesta hora (whis windows --cacada), ex.: "01:30" — de madrugada, a janela de 5 h que ela abre fecha antes de você acordar; vazio = só quando você chama
+modo_da_cacada_agendada = "alternar"  # o que a caçada agendada corre: "freelas", "vagas" ou "alternar" (uma noite cada)
+teto_da_cacada_agendada = 50  # fora da véspera da virada, a caçada agendada não começa nem segue com o plano semanal neste ponto (%): o resto da semana é seu; na véspera, gasta o que sobraria
 encaixe_minimo_tentar = 40   # tentar a sorte com encaixe abaixo disto (0 a 100) sai do relatório e das mensagens prontas
 plataformas_sem_conta = ["peopleperhour", "workana"]  # sites em que sua conta não está ativa (em análise ou reprovada): a caçada não lê a fonte, não procura lá e tira o que vier deles; quando a conta valer, apague o nome daqui (ex.: [])
 plataformas_pagas = ["freelancer.com.br", "freelancer.com"]  # sites em que responder a um projeto pede plano pago que você não assinou: a caçada, a vigia e o modo freelas tiram o que vier deles e não procuram lá; quando assinar, apague o nome daqui
@@ -265,6 +270,9 @@ CHAVES: tuple[Chave, ...] = (
     Chave("cacada", "usuario_freelancer", "cacada_usuario_freelancer", Tipo.TEXTO),
     Chave("cacada", "limite_minutos", "cacada_limite_minutos", Tipo.INTEIRO),
     Chave("cacada", "limite_plano", "cacada_limite_plano", Tipo.INTEIRO),
+    Chave("cacada", "horario_da_cacada", "cacada_horario_da_cacada", Tipo.TEXTO),
+    Chave("cacada", "modo_da_cacada_agendada", "cacada_modo_da_cacada_agendada", Tipo.TEXTO),
+    Chave("cacada", "teto_da_cacada_agendada", "cacada_teto_da_cacada_agendada", Tipo.INTEIRO),
     Chave("cacada", "encaixe_minimo_tentar", "cacada_encaixe_minimo_tentar", Tipo.INTEIRO),
     Chave("cacada", "plataformas_sem_conta", "cacada_plataformas_sem_conta", Tipo.LISTA),
     Chave("cacada", "plataformas_pagas", "cacada_plataformas_pagas", Tipo.LISTA),
@@ -405,6 +413,9 @@ class Configuracao:
     cacada_usuario_freelancer: str = ""
     cacada_limite_minutos: int = 90
     cacada_limite_plano: int = 15
+    cacada_horario_da_cacada: str = ""
+    cacada_modo_da_cacada_agendada: str = "alternar"
+    cacada_teto_da_cacada_agendada: int = 50
     cacada_encaixe_minimo_tentar: int = 40
     cacada_plataformas_sem_conta: tuple[str, ...] = PLATAFORMAS_SEM_CONTA
     cacada_plataformas_pagas: tuple[str, ...] = PLATAFORMAS_PAGAS
@@ -578,6 +589,15 @@ def carregar_texto(texto: str, *, origem: Path) -> Configuracao:
         cacada_usuario_freelancer=str(cacada.get("usuario_freelancer", "")).strip().strip("/").rsplit("/", 1)[-1],
         cacada_limite_minutos=_inteiro_entre(cacada.get("limite_minutos", 90), "[cacada].limite_minutos", 0, 1440, arquivo),
         cacada_limite_plano=_inteiro_entre(cacada.get("limite_plano", 15), "[cacada].limite_plano", 0, 100, arquivo),
+        cacada_horario_da_cacada=(
+            _hora(cacada["horario_da_cacada"], "[cacada].horario_da_cacada", arquivo)
+            if str(cacada.get("horario_da_cacada", "")).strip()
+            else ""
+        ),
+        cacada_modo_da_cacada_agendada=_modo_da_cacada_agendada(cacada.get("modo_da_cacada_agendada", "alternar"), arquivo),
+        cacada_teto_da_cacada_agendada=_inteiro_entre(
+            cacada.get("teto_da_cacada_agendada", 50), "[cacada].teto_da_cacada_agendada", 1, 100, arquivo
+        ),
         cacada_encaixe_minimo_tentar=_inteiro_entre(
             cacada.get("encaixe_minimo_tentar", 40), "[cacada].encaixe_minimo_tentar", 0, 100, arquivo
         ),
@@ -673,6 +693,16 @@ def _hora(valor: object, chave: str, arquivo: Path) -> str:
             f"HH:MM em 24 horas (por exemplo \"04:00\"), e veio {valor!r}."
         ) from None
     return texto.strip()
+
+
+def _modo_da_cacada_agendada(valor: object, arquivo: Path) -> str:
+    texto = str(valor).strip().casefold()
+    if texto not in MODOS_DA_CACADA_AGENDADA:
+        raise ConfiguracaoInvalida(
+            f"Configuração em {arquivo}: '[cacada].modo_da_cacada_agendada' precisa ser "
+            f"{', '.join(repr(m) for m in MODOS_DA_CACADA_AGENDADA)}, e veio {valor!r}."
+        )
+    return texto
 
 
 def _modo_das_propostas_auto(valor: object, arquivo: Path) -> str:

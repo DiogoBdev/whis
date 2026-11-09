@@ -80,6 +80,8 @@ RODADAS_EXTRAS_DE_BUSCA = 30
 RODADAS_EXTRAS_MINIMAS = 3
 IDADE_MAXIMA_DA_RETOMADA = timedelta(days=4)
 PERTO_DA_VIRADA = timedelta(hours=24)
+#: A caçada agendada para com a janela de 5 h neste ponto: o resto da sessão nunca é dela.
+TETO_DA_SESSAO_AGENDADA = 90
 
 
 class Parada(RuntimeError):
@@ -269,6 +271,24 @@ class GuardaDoPlano:
         self.limite_batido = ""
         self._virada_conhecida = virada_conhecida
         self._sem_limite_pela_virada: bool | None = None if self.limite.automatico else False
+        #: A caçada agendada (`agendar`): não espera a janela de 5 h, para nela, e tem teto semanal próprio.
+        self.agendada = False
+        self.teto_da_sessao: int | None = None
+        self.teto_fora_da_vespera = TETO_FORA_DA_VESPERA
+        self.vespera = VESPERA
+
+    def agendar(self, teto_semanal_agendado: int) -> None:
+        """A caçada que roda sozinha de madrugada: o plano dele vem primeiro.
+
+        Fora das 24 h antes da virada, para com a semana em `teto_semanal_agendado`;
+        nunca espera a janela de 5 h abrir (para, e a próxima noite retoma) e para
+        com ela em `TETO_DA_SESSAO_AGENDADA`; nunca atravessa a virada da semana.
+        """
+        self.agendada = True
+        self.atravessa_virada = False
+        self.teto_da_sessao = TETO_DA_SESSAO_AGENDADA
+        self.teto_fora_da_vespera = min(TETO_FORA_DA_VESPERA, teto_semanal_agendado)
+        self.vespera = PERTO_DA_VIRADA
 
     def agora(self) -> datetime:
         return self._relogio()
@@ -281,8 +301,10 @@ class GuardaDoPlano:
 
     def teto(self) -> int:
         vira = self.plano.vira_sete_dias if self.plano else None
-        if vira is not None and vira - self._relogio() > VESPERA:
-            return min(self.teto_semanal, TETO_FORA_DA_VESPERA)
+        if vira is not None and vira - self._relogio() > self.vespera:
+            return min(self.teto_semanal, self.teto_fora_da_vespera)
+        if vira is None and self.agendada:
+            return min(self.teto_semanal, self.teto_fora_da_vespera)
         return self.teto_semanal
 
     def limitada(self) -> bool:
@@ -331,6 +353,15 @@ class GuardaDoPlano:
             raise LimiteBatido(motivo)
         if self.plano is None:
             return
+        sessao = self.plano.cinco_horas
+        if self.teto_da_sessao is not None and sessao is not None and sessao >= self.teto_da_sessao:
+            motivo = (
+                f"a janela de 5 h do plano chegou a {sessao}% (a caçada agendada para em {self.teto_da_sessao}% "
+                "e retoma na próxima noite)"
+            )
+            if self.fim_do_extra is not None:
+                raise JanelaEsgotada(motivo)
+            raise Parada(motivo)
         semanal = self.plano.sete_dias
         vira = self.plano.vira_sete_dias
         no_teto = semanal is not None and semanal >= self.teto()
@@ -363,6 +394,11 @@ class GuardaDoPlano:
                         self._esperar_virada(vira)
                         continue
                     raise Parada("o limite semanal do plano bateu") from limite
+                if self.agendada:
+                    motivo = "a janela de 5 h do plano bateu (a caçada agendada não espera: retoma na próxima noite)"
+                    if self.fim_do_extra is not None:
+                        raise JanelaEsgotada(motivo) from limite
+                    raise Parada(motivo) from limite
                 if tentativa >= PAUSAS_POR_CHAMADA:
                     raise Parada("a janela de 5 h bateu de novo depois de três pausas") from limite
                 self._pausar(limite)
@@ -422,11 +458,13 @@ def cacar(
     dormir: Callable[[float], None] = time.sleep,
     ao_pausar: Callable[[str], None] | None = None,
     limite: LimiteDaCacada | None = None,
+    agendada: bool = False,
 ) -> ResultadoDaCacada:
     """A corrida inteira, retomando do checkpoint quando há um inacabado e recente do mesmo modo.
 
     `modo="freelas"` é a caçada de freelas rápidos (`freelas_rapidos`). `limite`
     ausente é sem limite; o `hunt` passa o de `LimiteDaCacada.escolher`.
+    `agendada` é a que roda sozinha de madrugada (`GuardaDoPlano.agendar`).
     """
     agora = relogio or (lambda: datetime.now().astimezone())
     inicio_monotonico = time.monotonic()
@@ -456,6 +494,8 @@ def cacar(
         virada_conhecida=_virada_conhecida(pasta_do_estado, agora()) if limite and limite.automatico else None,
     )
     guarda.atravessa_virada = modo == MODO_FREELAS
+    if agendada:
+        guarda.agendar(configuracao.cacada_teto_da_cacada_agendada)
     parada = ""
     try:
         _etapa_do_perfil(estado, portas, guarda)

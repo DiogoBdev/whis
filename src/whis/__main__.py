@@ -8,12 +8,12 @@ para as reuniões da Granola::
 
     python -m whis init
     python -m whis bandeja
-    python -m whis windows [--daily] [--news] [--meetings] [--hunt] [--vigia-freelas] [--procura] [--instagram] [--remover] [--remover-legado]
+    python -m whis windows [--daily] [--news] [--meetings] [--hunt] [--cacada] [--vigia-freelas] [--procura] [--instagram] [--remover] [--remover-legado]
     python -m whis diario [YYYY-MM-DD] [--simular]
     python -m whis daily [--anotar TEXTO] [--simular] [--fakes] [--agendada]
     python -m whis news [--agendada] [--fakes] [--simular]
     python -m whis meetings [--agendada] [--fakes]
-    python -m whis hunt [--simular] [--fakes] [--do-zero] [--freelas] [--limite-minutos N] [--limite-plano N] [--sem-limite]
+    python -m whis hunt [--simular] [--fakes] [--do-zero] [--freelas] [--limite-minutos N] [--limite-plano N] [--sem-limite] [--agendada]
     python -m whis linkedin [--fakes] | linkedin-login | linkedin-publicar <nota>
     python -m whis contas [--so SITE] [--senha SITE] | navegador [url]
     python -m whis lembrete [--agendada] | candidaturas
@@ -876,10 +876,20 @@ def _comando_hunt(args: argparse.Namespace) -> int:
     if args.sem_limite and (args.limite_minutos is not None or args.limite_plano is not None):
         print("Use --sem-limite sozinho, ou --limite-minutos/--limite-plano: os dois juntos se contradizem.", file=sys.stderr)
         return 2
+    if args.agendada and (args.sem_limite or args.limite_minutos is not None or args.limite_plano is not None):
+        print("A caçada agendada usa os limites do [cacada]: tire --sem-limite, --limite-minutos e --limite-plano.", file=sys.stderr)
+        return 2
     configuracao = _configuracao(args)
     _registro.acrescentar_arquivo(configuracao, verboso=args.verboso)
     if args.simular:
         return _simular_coleta(configuracao, freelas=args.freelas)
+    if args.agendada:
+        agora = datetime.now().astimezone()
+        if motivo := _cacada_agendada_fora_de_hora(configuracao.cacada_horario_da_cacada, agora):
+            _log.info("Caçada agendada não começou: %s.", motivo)
+            print(f"Não comecei: {motivo}.")
+            return SAIDA_COMPLETA
+        args.freelas = args.freelas or _freelas_nesta_noite(configuracao.cacada_modo_da_cacada_agendada, agora.date())
     limite = LimiteDaCacada.escolher(
         configuracao, minutos=args.limite_minutos, plano=args.limite_plano, sem_limite=args.sem_limite
     )
@@ -898,7 +908,7 @@ def _comando_hunt(args: argparse.Namespace) -> int:
     try:
         with _corrida.TravaDaCacada(pasta):
             _corrida.manter_acordado()
-            if avisar:
+            if avisar and not args.agendada:
                 _palheta.avisar_resultado(
                     configuracao,
                     _palheta.Resultado(
@@ -920,6 +930,7 @@ def _comando_hunt(args: argparse.Namespace) -> int:
                     modo=MODO_FREELAS if args.freelas else "",
                     ao_pausar=ao_pausar,
                     limite=limite,
+                    agendada=args.agendada,
                 )
                 if args.freelas and resultado.completa:
                     _agencias_do_mes(configuracao, fakes=args.fakes)
@@ -931,6 +942,7 @@ def _comando_hunt(args: argparse.Namespace) -> int:
                         montar_portas_da_cacada(configuracao, fakes=args.fakes),
                         pasta_do_estado=pasta,
                         ao_pausar=ao_pausar,
+                        agendada=args.agendada,
                     )
             finally:
                 _corrida.liberar_sono()
@@ -943,6 +955,37 @@ def _comando_hunt(args: argparse.Namespace) -> int:
     if avisar:
         _palheta.avisar_resultado(configuracao, _palheta.resultado_da_cacada(resultado))
     return SAIDA_COMPLETA if resultado.completa else SAIDA_PARCIAL
+
+
+#: Quanto depois da hora marcada a caçada agendada ainda começa. O launchd roda na hora em
+#: que o Mac acorda a tarefa que perdeu: sem isso, ela comeria a sessão da manhã dele.
+ATRASO_MAXIMO_DA_CACADA_AGENDADA = timedelta(minutes=60)
+
+
+def _cacada_agendada_fora_de_hora(horario: str, agora: datetime) -> str:
+    """O motivo para a caçada agendada não começar agora; vazio quando ela pode."""
+    if not horario:
+        return "[cacada].horario_da_cacada está vazio"
+    horas, minutos = (int(parte) for parte in horario.split(":"))
+    marcada = agora.replace(hour=horas, minute=minutos, second=0, microsecond=0)
+    if marcada > agora:
+        marcada -= timedelta(days=1)
+    atraso = agora - marcada
+    if atraso > ATRASO_MAXIMO_DA_CACADA_AGENDADA:
+        return (
+            f"era para {horario} e já são {agora:%H:%M} (o computador devia estar dormindo); "
+            "rodar agora gastaria a sessão do seu dia, então fica para a próxima noite"
+        )
+    return ""
+
+
+def _freelas_nesta_noite(modo: str, dia: date) -> bool:
+    """`alternar` faz freelas nas noites de dia ímpar desde 1/1/1 e vagas nas outras."""
+    if modo == "freelas":
+        return True
+    if modo == "vagas":
+        return False
+    return dia.toordinal() % 2 == 1
 
 
 def _simular_coleta(configuracao: Configuracao, *, freelas: bool = False) -> int:
@@ -2237,13 +2280,13 @@ def _comando_windows(args: argparse.Namespace) -> int:
     from . import automacao
 
     precisa_da_configuracao = bool(args.config) or (
-        (args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura or args.instagram) and not args.remover
+        (args.daily or args.news or args.meetings or args.hunt or args.cacada or args.vigia_freelas or args.procura or args.instagram) and not args.remover
     )
     configuracao = _configuracao(args) if precisa_da_configuracao else None
     origem = (configuracao.origem if configuracao else None) or caminho_padrao()
     feitos: list[str] = []
     so_remover_legado = args.remover_legado and not (
-        args.atendente or args.daily or args.news or args.meetings or args.hunt or args.vigia_freelas or args.procura or args.instagram
+        args.atendente or args.daily or args.news or args.meetings or args.hunt or args.cacada or args.vigia_freelas or args.procura or args.instagram
     )
 
     if args.daily and not args.remover and not configuracao.daily_horarios:
@@ -2330,6 +2373,13 @@ def _comando_windows(args: argparse.Namespace) -> int:
                         f"Vigia reagendado como '{automacao.NOME_DA_TAREFA_DO_VIGIA}': "
                         f"agora vigia {', '.join(vigiadas)}."
                     )
+            if args.cacada:
+                removida = automacao.desagendar_cacada()
+                feitos.append(
+                    f"Tarefa '{automacao.NOME_DA_TAREFA_DA_CACADA}' removida do Agendador."
+                    if removida
+                    else "Não havia caçada agendada."
+                )
             if args.hunt:
                 removida = automacao.desagendar_lembrete()
                 feitos.append(
@@ -2395,6 +2445,15 @@ def _comando_windows(args: argparse.Namespace) -> int:
                     f"Lembrete da caçada agendado como '{automacao.NOME_DA_TAREFA_DO_LEMBRETE}': todo dia às "
                     f"{configuracao.cacada_hora_do_lembrete} ele olha se a semana do plano vira nas próximas 30 h "
                     f"e avisa por toast, uma vez por virada. A caçada continua só quando você chama."
+                )
+            if args.cacada:
+                automacao.agendar_cacada(configuracao)
+                feitos.append(
+                    f"Caçada agendada como '{automacao.NOME_DA_TAREFA_DA_CACADA}': todo dia às "
+                    f"{configuracao.cacada_horario_da_cacada} ela roda sozinha ({configuracao.cacada_modo_da_cacada_agendada}). "
+                    f"Fora da véspera da virada, para com a semana em {configuracao.cacada_teto_da_cacada_agendada}% e nos "
+                    f"limites de {configuracao.cacada_limite_minutos} min e {configuracao.cacada_limite_plano} pontos; "
+                    "nunca espera a janela de 5 h e não começa mais de 1 h atrasada."
                 )
             if args.vigia_freelas:
                 automacao.agendar_vigia_de_freelas(configuracao)
@@ -2757,6 +2816,15 @@ def construir_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="vai até o plano acabar, mesmo longe da virada (no modo freelas, atravessa a virada e emenda a caçada de vagas)",
     )
+    hunt_cmd.add_argument(
+        "--agendada",
+        action="store_true",
+        help=(
+            "é como a tarefa Whis-Cacada chama, em [cacada].horario_da_cacada: o modo de "
+            "[cacada].modo_da_cacada_agendada, nunca espera a janela de 5 h, para com ela em 90%% e com a semana em "
+            "[cacada].teto_da_cacada_agendada (na véspera da virada, gasta o que sobraria) e não começa atrasada"
+        ),
+    )
     hunt_cmd.set_defaults(funcao=_comando_hunt)
 
     contas_cmd = subcomandos.add_parser(
@@ -2968,6 +3036,14 @@ def construir_parser() -> argparse.ArgumentParser:
         help=(
             "também agenda a puxada das reuniões da Granola todo dia em [granola].horario "
             "(tarefa Whis-Reunioes) e reagenda o vigia, se existe, para olhar por ela"
+        ),
+    )
+    windows_cmd.add_argument(
+        "--cacada",
+        action="store_true",
+        help=(
+            "agenda a caçada que roda sozinha todo dia em [cacada].horario_da_cacada (tarefa Whis-Cacada, "
+            "whis hunt --agendada), cuidando do plano: teto semanal próprio e nunca espera a janela de 5 h"
         ),
     )
     windows_cmd.add_argument(

@@ -21,6 +21,7 @@ import os
 import plistlib
 import shlex
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -29,6 +30,10 @@ _log = logging.getLogger("whis.launchd")
 Executor = Callable[[list[str]], subprocess.CompletedProcess]
 
 PREFIXO = "dev.whis."
+
+#: Quantas vezes o `bootstrap` tenta de novo enquanto o `bootout` do agente antigo termina.
+TENTATIVAS_DO_BOOTSTRAP = 10
+ESPERA_DO_BOOTSTRAP_S = 0.5
 
 _DIAS = {
     "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3,
@@ -115,6 +120,13 @@ def escrever_e_carregar(
     with destino.open("wb") as arquivo:
         plistlib.dump(dados, arquivo)
     resultado = executar(["launchctl", "bootstrap", _dominio(), str(destino)])
+    # O `bootout` termina em segundo plano: o `bootstrap` logo depois recusa com
+    # "5: Input/output error" enquanto o agente antigo ainda sai (a bandeja ficava fora).
+    for _tentativa in range(TENTATIVAS_DO_BOOTSTRAP):
+        if resultado.returncode == 0 or "Input/output error" not in (resultado.stderr or resultado.stdout or ""):
+            break
+        time.sleep(ESPERA_DO_BOOTSTRAP_S)
+        resultado = executar(["launchctl", "bootstrap", _dominio(), str(destino)])
     if resultado.returncode != 0:
         from .automacao import ErroDeAutomacao
 

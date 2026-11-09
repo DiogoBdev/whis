@@ -22,7 +22,16 @@ MODO_FREELAS = "freelas"
 
 #: O que faz um freela ser do nicho: o nome dele, no título ou na descrição; nicho
 #: fora da tabela casa só pelo próprio nome.
-PALAVRAS_DO_NICHO = {"shopify": ("shopify", "liquid")}
+PALAVRAS_DO_NICHO = {
+    "shopify": ("shopify", "liquid"),
+    #: Manutenção de sites e sistemas, e sistema robusto (ERP, CRM, sistema interno, back-end).
+    "sistemas": (
+        "manutenção", "manutencao", "maintenance", "maintain", "suporte de site", "suporte do sistema",
+        "erp", "crm", "sistema web", "sistema de gestão", "sistema interno", "sistema sob medida", "web app",
+        "saas", "back-end", "backend", "laravel", "asp.net", ".net", "c#", "legacy", "legado",
+        "painel administrativo", "admin panel", "dashboard",
+    ),
+}
 
 #: O e-commerce muito perto do nicho, só no título: na descrição, "e-commerce" aparece
 #: de passagem em vaga de marketing e site de imobiliária (simulação de 17/10).
@@ -30,6 +39,10 @@ PERTO_DO_NICHO = {
     "shopify": (
         "e-commerce", "ecommerce", "loja virtual", "loja online", "online store", "woocommerce", "nuvemshop",
         "vtex", "bigcommerce", "magento",
+    ),
+    "sistemas": (
+        "sistema", "system", "api", "integração", "integracao", "integration", "node.js", "nodejs", "python",
+        "php", "postgresql", "sql server", "automação", "automation", "plataforma", "platform",
     ),
 }
 
@@ -95,6 +108,11 @@ Quanto mais novo o anúncio (até 3 dias) e menos propostas, maior o encaixe.
 
 #: O trabalho do nicho que casa com o que ele já fez, para o pedido dizer o que é chance boa.
 TRABALHO_DO_NICHO = {
+    "sistemas": (
+        "manutenção e evolução de site ou sistema que já existe (bug, atualização, performance, hospedagem), ERP, "
+        "CRM, painel e sistema interno, back-end e API em Node.js, Python, C#/.NET ou PHP/Laravel com PostgreSQL, "
+        "SQL Server ou MySQL, integração entre sistemas e automação, e IA aplicada (agentes, LLM) dentro deles"
+    ),
     "shopify": (
         "ajuste ou seção de tema, Liquid, app ou checkout, montar ou configurar a loja, velocidade, rastreio "
         "(Pixel, GA4, Merchant Center) ou integração na loja"
@@ -114,13 +132,29 @@ para quem trabalha de dia é "descartada". Freela por hora avulso continua "desc
 - No resumo do freela, diga quantas horas ele leva com IA e o preço que faz sentido pedir."""
 
 
+#: O trabalho muito perto do nicho que também pode ser chance boa.
+_VIZINHO = "de e-commerce muito perto dele (loja virtual em outra plataforma, com o mesmo tipo de trabalho)"
+VIZINHO_DO_NICHO = {"sistemas": "de sistema web, API ou integração muito perto dele (o mesmo tipo de trabalho)"}
+
+#: O que o nicho muda nas regras do modo (que pedem freela pequeno e descartam contrato contínuo).
+REGRA_DO_NICHO = {
+    "sistemas": (
+        "- Neste nicho valem duas exceções às regras acima: (1) manutenção mensal de site ou sistema (valor fixo "
+        "por mês, poucas horas por semana) não é descartada por ser contínua; (2) sistema grande (ERP, CRM, "
+        "sistema interno) pode passar das 20 horas quando é pago por marco, com escopo e orçamento claros e prazo "
+        "que caiba em quem trabalha de dia. Os dois entram no máximo como \"chance_boa\" com o encaixe que merecem; "
+        "sem escopo, sem orçamento ou com prazo curto continuam \"descartada\".\n"
+    ),
+}
+
+
 def _chance_do_nicho(nicho: str) -> str:
     nome = nicho.strip().title()
     trabalho = TRABALHO_DO_NICHO.get(nicho.strip().casefold())
     do_nicho = f"de {nome} ({trabalho})" if trabalho else f"de {nome}"
-    return (
-        f'- "chance_boa" é só o freela rápido {do_nicho}, ou de e-commerce muito perto dele (loja virtual em outra '
-        "plataforma, com o mesmo tipo de trabalho), que casa forte com o que ele já fez. Quanto mais novo o anúncio "
+    return REGRA_DO_NICHO.get(nicho.strip().casefold(), "") + (
+        f'- "chance_boa" é só o freela rápido {do_nicho}, ou {VIZINHO_DO_NICHO.get(nicho.strip().casefold(), _VIZINHO)}, '
+        "que casa forte com o que ele já fez. Quanto mais novo o anúncio "
         "(até 3 dias) e menos propostas, maior o encaixe.\n"
         f'- "tentar_a_sorte" é o freela rápido do nicho de encaixe médio ou com muita proposta, e o de fora do nicho '
         f'que casa com ele: fora do nicho nunca é "chance_boa", por melhor que seja o encaixe (é em {nome} que ele '
@@ -170,6 +204,15 @@ NOME_DOS_BOUNTIES = "Web · bounties pagos"
 
 #: O que as buscas web genéricas pedem quando há nicho (recentes, fora das grandes, internacional, posts).
 BUSCAS_DO_NICHO = {
+    "sistemas": (
+        "de manutenção de site ou sistema web que já existe, ERP, CRM, painel administrativo, back-end ou API "
+        "(Node.js, Python, C#/.NET, PHP/Laravel) ou integração entre sistemas",
+        "de manutenção de sites e sistemas, ERP, CRM ou sistema interno sob medida",
+        "Website and web app maintenance (monthly retainers too), ERP/CRM and custom business systems, back-end and "
+        "API work (Node.js, Python, C#/.NET, PHP/Laravel), system integrations; clients anywhere in the world, "
+        "paid in USD",
+        "de manutenção de site ou sistema, ERP, CRM ou sistema sob medida",
+    ),
     "shopify": (
         "de Shopify (ajuste ou seção de tema, Liquid, montar ou configurar a loja, app, checkout, velocidade) ou de "
         "loja virtual em outra plataforma",

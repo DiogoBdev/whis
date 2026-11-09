@@ -156,7 +156,7 @@ def test_toda_chave_do_modelo_e_escrita_e_nenhuma_a_mais(completo):
     gerado = tomllib.loads(gerar_toml(valores_de(completo)))
 
     assert _achatar(gerado).keys() == _achatar(do_modelo).keys()
-    assert len(CHAVES) == len(_achatar(do_modelo)) == 85
+    assert len(CHAVES) == len(_achatar(do_modelo)) == 88
 
 
 def _achatar(dados: dict) -> dict[str, object]:

@@ -69,6 +69,9 @@ NOME_DA_TAREFA_DO_VIGIA = "Whis-Vigia"
 NOME_DA_TAREFA_DO_JORNAL = "Whis-Noticias"
 NOME_DA_TAREFA_DAS_REUNIOES = "Whis-Reunioes"
 NOME_DA_TAREFA_DO_LEMBRETE = "Whis-Lembrete-Cacada"
+NOME_DA_TAREFA_DA_CACADA = "Whis-Cacada"
+#: A caçada agendada para sozinha (limites, janela de 5 h, virada); este é só o teto do Agendador do Windows.
+LIMITE_DA_CACADA_AGENDADA_MIN = 8 * 60
 NOME_DA_TAREFA_DA_VIGIA_DE_FREELAS = "Whis-Vigia-Freelas"
 NOME_DA_TAREFA_DA_PROCURA = "Whis-Procura"
 NOME_DA_TAREFA_DO_INSTAGRAM = "Whis-Instagram"
@@ -573,6 +576,31 @@ def agendar_lembrete(configuracao: Configuracao, *, executar: Executor = _rodar)
 
 def desagendar_lembrete(*, executar: Executor = _rodar) -> bool:
     return _desregistrar_tarefa(NOME_DA_TAREFA_DO_LEMBRETE, executar=executar)
+
+
+def agendar_cacada(configuracao: Configuracao, *, executar: Executor = _rodar) -> str:
+    """Registra `Whis-Cacada`: todo dia em `[cacada].horario_da_cacada`, `whis hunt --agendada`.
+
+    Quem cuida do plano é a própria caçada agendada (`GuardaDoPlano.agendar`): teto semanal
+    próprio, nunca espera a janela de 5 h e não começa atrasada.
+    """
+    if not configuracao.cacada_horario_da_cacada:
+        raise ErroDeAutomacao(
+            'o [cacada].horario_da_cacada está vazio: ponha uma hora (ex.: "01:30") e rode de novo.'
+        )
+    _registrar_tarefa(
+        NOME_DA_TAREFA_DA_CACADA,
+        executavel=str(interpretador_sem_console()),
+        argumentos=_argumentos_do_whis("hunt --agendada", configuracao.origem or caminho_padrao()),
+        gatilhos=[f"Daily={configuracao.cacada_horario_da_cacada}"],
+        executar=executar,
+        limite_minutos=LIMITE_DA_CACADA_AGENDADA_MIN,
+    )
+    return NOME_DA_TAREFA_DA_CACADA
+
+
+def desagendar_cacada(*, executar: Executor = _rodar) -> bool:
+    return _desregistrar_tarefa(NOME_DA_TAREFA_DA_CACADA, executar=executar)
 
 
 def agendar_vigia_de_freelas(configuracao: Configuracao, *, executar: Executor = _rodar) -> str:
