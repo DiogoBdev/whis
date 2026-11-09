@@ -273,7 +273,14 @@ class JanelaDaPalheta:
         raiz = tk.Tk()
         raiz.withdraw()
         raiz.title("Whis")
-        raiz.overrideredirect(True)
+        if _MAC:
+            # No Mac a janela `overrideredirect` nunca vira a janela de teclado
+            # (`canBecomeKeyWindow` = NO no Tk 9): a palheta aparecia, mas o que
+            # se digitava ia para o app de trás. A classe "plain" aceita o
+            # teclado; a barra de título sai em `_tirar_a_barra_no_mac`.
+            raiz.tk.call("::tk::unsupported::MacWindowStyle", "style", raiz._w, "plain", "none")
+        else:
+            raiz.overrideredirect(True)
         raiz.attributes("-topmost", True)
         raiz.configure(background=FUNDO)
 
@@ -381,6 +388,9 @@ class JanelaDaPalheta:
         self._raiz.deiconify()
         self._raiz.lift()
         self._vestir()
+        if _MAC:
+            self._tirar_a_barra_no_mac()
+            _ativar_o_app_no_mac()
         self._campo.focus_force()
         self._visivel = True
 
@@ -506,6 +516,21 @@ class JanelaDaPalheta:
         )
         self._campo.configure(background=cor_do_campo)
         self._placeholder.configure(background=cor_do_campo)
+
+    def _tirar_a_barra_no_mac(self) -> None:
+        """Deixa a janela "plain" sem borda (`styleMask` 0) sem perder o teclado.
+
+        Roda a cada `mostrar`: o Tk pode refazer o estilo ao mapear de novo.
+        """
+        try:
+            from AppKit import NSApplication
+
+            self._raiz.update_idletasks()
+            for janela in NSApplication.sharedApplication().windows():
+                if janela.title() == "Whis" and janela.styleMask() != 0:
+                    janela.setStyleMask_(0)
+        except Exception as erro:  # noqa: BLE001 — com barra é feio, mas funciona
+            _log.debug("Sem tirar a barra da palheta no Mac: %s", erro)
 
     def _vestir(self) -> None:
         """Uma vez, com a janela já mapeada (só então existe o HWND que o DWM enxerga)."""
@@ -997,6 +1022,21 @@ class JanelaDaPalheta:
             com_foco = None
         if self._visivel and com_foco is None:
             self.esconder()
+
+
+def _ativar_o_app_no_mac() -> None:
+    """Traz o Whis para a frente: a bandeja roda pelo launchd, em segundo plano,
+    e sem isso o teclado continua no app em que o usuário estava."""
+    try:
+        from AppKit import NSApplication
+
+        app = NSApplication.sharedApplication()
+        if hasattr(app, "activate"):  # macOS 14+: `activateIgnoringOtherApps` está obsoleto
+            app.activate()
+        else:
+            app.activateIgnoringOtherApps_(True)
+    except Exception as erro:  # noqa: BLE001
+        _log.debug("Não consegui ativar o Whis no Mac: %s", erro)
 
 
 def _variantes(tecla: str) -> tuple[str, ...]:
